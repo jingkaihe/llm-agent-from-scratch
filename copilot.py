@@ -6,12 +6,9 @@ from main import read_file, write_file, edit_file, shell, load_mcp_config
 
 async def loop_responses(system_prompt, toolbox, messages, user_input, model="gpt-5"):
     """Loop using OpenAI Responses API - for gpt-5 and gpt-5-codex"""
-    # Note: messages maintains the full conversation history as input items
-    # Add new user input to the conversation
     messages.append({"role": "user", "content": user_input})
 
     while True:
-        # Convert Anthropic tool schema to OpenAI Responses API format
         tools = (
             [
                 {
@@ -34,13 +31,10 @@ async def loop_responses(system_prompt, toolbox, messages, user_input, model="gp
             tool_choice="auto" if tools else None,
         )
 
-        # Add response output to conversation history
         messages.extend(response.output)
 
-        # Extract and display reasoning and text messages
         for item in response.output:
             if item.type == "reasoning":
-                # Display reasoning content if available, otherwise show summary
                 if item.content:
                     reasoning_text = " ".join(
                         c.text for c in item.content if c.type == "reasoning_text"
@@ -58,7 +52,6 @@ async def loop_responses(system_prompt, toolbox, messages, user_input, model="gp
                     if content.type == "output_text":
                         print(f"🤖 {content.text}")
 
-        # Extract function calls
         function_calls = [
             item for item in response.output if item.type == "function_call"
         ]
@@ -66,7 +59,6 @@ async def loop_responses(system_prompt, toolbox, messages, user_input, model="gp
         if not function_calls:
             break
 
-        # Execute all tools and collect results
         results = await asyncio.gather(
             *[
                 toolbox.run(item.name, json.loads(item.arguments))
@@ -74,7 +66,6 @@ async def loop_responses(system_prompt, toolbox, messages, user_input, model="gp
             ]
         )
 
-        # Display results and add function outputs to conversation history
         for item, result in zip(function_calls, results):
             status = "✅" if result.get("success") else "❌"
             print(f"{status} {item.name}:")
@@ -96,7 +87,6 @@ async def loop_completions(
     messages.append({"role": "user", "content": user_input})
 
     while True:
-        # Convert Anthropic tool schema to OpenAI Chat Completions format
         tools = (
             [
                 {
@@ -132,7 +122,6 @@ async def loop_completions(
         if not tool_calls:
             break
 
-        # Execute all tools and collect results
         results = await asyncio.gather(
             *[
                 toolbox.run(tc.function.name, json.loads(tc.function.arguments))
@@ -140,7 +129,6 @@ async def loop_completions(
             ]
         )
 
-        # Display results and add to messages
         for tc, result in zip(tool_calls, results):
             status = "✅" if result.get("success") else "❌"
             print(f"{status} {tc.function.name}:")
@@ -181,15 +169,10 @@ def main(model):
 
     print(f"Using {model}")
 
-    # Select the appropriate loop based on model
-    if model in ["gpt-5", "gpt-5-codex"]:
-        print("Using Responses API")
-        loop_func = loop_responses
-    else:
-        print("Using Chat Completions API")
-        loop_func = loop_completions
+    loop_func = (
+        loop_responses if model in ["gpt-5", "gpt-5-codex"] else loop_completions
+    )
 
-    # Create a wrapped loop that includes the model
     async def model_loop(system_prompt, toolbox, messages, user_input):
         return await loop_func(
             system_prompt, toolbox, messages, user_input, model=model
