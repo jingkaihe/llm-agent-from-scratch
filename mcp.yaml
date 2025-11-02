@@ -1,6 +1,7 @@
 # GitHub server - provides GitHub API access
 servers:
-  - command: docker
+  github:
+    command: docker
     args:
       - "run"
       - "--rm"
