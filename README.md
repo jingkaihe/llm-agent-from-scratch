@@ -80,6 +80,8 @@ servers:
       ENV_VAR: value
 ```
 
+Or simply `cp mcp.yaml.sample mcp.yaml` if you want to start with a sample configuration.
+
 Each server is identified by a unique name (e.g., `github`, `filesystem`) and tools from that server will be prefixed with `mcp__server_name__`.
 
 #### Configuration Options

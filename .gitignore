@@ -17,3 +17,9 @@ wheels/
 # IPython
 profile_default/
 ipython_config.py
+
+# Copilot credentials
+.copilot.json
+
+# mcp config
+mcp.yaml

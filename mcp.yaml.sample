@@ -1,4 +1,4 @@
-# GitHub server - provides GitHub API access
+# # GitHub server - provides GitHub API access
 servers:
   github:
     command: docker

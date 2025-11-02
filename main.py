@@ -298,7 +298,7 @@ def load_mcp_config(config_path="mcp.yaml"):
         return {}
 
 
-async def run_agent(tools=[], mcp_servers=[]):
+async def run_agent(tools=[], mcp_servers=[], loop=loop):
     """Run the agent with local tools and optional MCP servers"""
     async with Toolbox(local_tools=tools, mcp_servers=mcp_servers) as toolbox:
         messages = []
@@ -308,7 +308,9 @@ You are running on {str(os.uname())}, today is {datetime.now().strftime("%Y-%m-%
 """
 
         if toolbox.mcp_tools:
-            num_servers = len(mcp_servers) if isinstance(mcp_servers, dict) else len(mcp_servers)
+            num_servers = (
+                len(mcp_servers) if isinstance(mcp_servers, dict) else len(mcp_servers)
+            )
             print(
                 f"🔌 Connected to {num_servers} MCP server(s) with {len(toolbox.mcp_tools)} tool(s)"
             )
