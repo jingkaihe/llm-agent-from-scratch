@@ -68,7 +68,7 @@ class Toolbox:
 
     async def _connect_mcp_servers(self):
         """Connect to all MCP servers and collect their tools"""
-        for server_config in self.mcp_servers:
+        for server_name, server_config in self.mcp_servers.items():
             # Expand cwd if it's a relative path or ~
             cwd = server_config.get("cwd")
             if cwd:
@@ -110,12 +110,15 @@ class Toolbox:
             tools_list = await session.list_tools()
 
             for tool in tools_list.tools:
+                # Prefix tool name with mcp__SERVER_NAME__
+                prefixed_name = f"mcp__{server_name}__{tool.name}"
                 self.mcp_tools.append(
                     {
-                        "name": tool.name,
+                        "name": prefixed_name,
                         "description": tool.description or f"MCP Tool: {tool.name}",
                         "input_schema": tool.inputSchema,
                         "mcp_session": session,
+                        "mcp_original_name": tool.name,  # Store original name for calling
                         "type": "mcp",
                     }
                 )
@@ -152,7 +155,9 @@ class Toolbox:
         tool = next(t for t in self.all_tools if t["name"] == name)
 
         if tool.get("type") == "mcp":
-            result = await tool["mcp_session"].call_tool(name, input)
+            # Use original tool name for MCP call
+            original_name = tool.get("mcp_original_name", name)
+            result = await tool["mcp_session"].call_tool(original_name, input)
             return {
                 "success": not result.isError,
                 "output": "\n".join(
@@ -282,15 +287,15 @@ def load_mcp_config(config_path="mcp.yaml"):
     config_file = Path(config_path)
 
     if not config_file.exists():
-        return []
+        return {}
 
     try:
         with open(config_file, "r") as f:
             config = yaml.safe_load(f)
-            return config.get("servers", [])
+            return config.get("servers", {})
     except Exception as e:
         print(f"⚠️  Error loading MCP config from {config_path}: {e}")
-        return []
+        return {}
 
 
 async def run_agent(tools=[], mcp_servers=[]):
@@ -303,8 +308,9 @@ You are running on {str(os.uname())}, today is {datetime.now().strftime("%Y-%m-%
 """
 
         if toolbox.mcp_tools:
+            num_servers = len(mcp_servers) if isinstance(mcp_servers, dict) else len(mcp_servers)
             print(
-                f"🔌 Connected to {len(mcp_servers)} MCP server(s) with {len(toolbox.mcp_tools)} tool(s)"
+                f"🔌 Connected to {num_servers} MCP server(s) with {len(toolbox.mcp_tools)} tool(s)"
             )
 
         print("enter 'exit' to quit")
