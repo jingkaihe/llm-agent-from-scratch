@@ -17,3 +17,6 @@ wheels/
 # IPython
 profile_default/
 ipython_config.py
+
+# MCP configuration (user-specific)
+mcp.yaml

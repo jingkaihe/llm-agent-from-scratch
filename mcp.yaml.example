@@ -1,0 +1,11 @@
+# GitHub server - provides GitHub API access
+servers:
+  - command: docker
+    args:
+      - "run"
+      - "--rm"
+      - "-i"
+      - "-e"
+      - "GITHUB_PERSONAL_ACCESS_TOKEN"
+      - "ghcr.io/github/github-mcp-server"
+    env: { GITHUB_PERSONAL_ACCESS_TOKEN: null }

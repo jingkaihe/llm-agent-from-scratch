@@ -3,8 +3,11 @@ from inspect import Parameter, signature
 from pydantic import create_model, Field
 import aiofiles
 from anthropic import AsyncAnthropic
-import json, os, asyncio
+import json, os, asyncio, yaml
 from datetime import datetime
+from pathlib import Path
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
 
 def tool(f):
@@ -38,26 +41,125 @@ def tool(f):
         "name": f.__name__,
         "description": f.__doc__ or f"Tool: {f.__name__}",
         "model": m,
+        "type": "local",
     }
 
 
 class Toolbox:
-    def __init__(self, tools):
-        self.tools = tools
+    """Manages both local and MCP tools with proper async lifecycle management"""
+
+    def __init__(self, local_tools=[], mcp_servers=[]):
+        self.local_tools = local_tools
+        self.mcp_servers = mcp_servers
+        self.mcp_tools = []
+        self.mcp_connections = []
+
+    async def __aenter__(self):
+        """Async context manager entry - connect to MCP servers"""
+        if self.mcp_servers:
+            await self._connect_mcp_servers()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup MCP connections"""
+        await self.cleanup()
+        return False
+
+    async def _connect_mcp_servers(self):
+        """Connect to all MCP servers and collect their tools"""
+        for server_config in self.mcp_servers:
+            # Expand cwd if it's a relative path or ~
+            cwd = server_config.get("cwd")
+            if cwd:
+                cwd = str(Path(cwd).expanduser().resolve())
+
+            for env_var in server_config.get("env", {}).keys():
+                value = server_config["env"].get(env_var)
+                if value is None:
+                    value = os.environ.pop(env_var, None)
+                if value is None:
+                    value = input(f"Enter value for {env_var}: ")
+                    value = value.strip()
+                server_config["env"][env_var] = value
+
+            server_params = StdioServerParameters(
+                command=server_config["command"],
+                args=server_config.get("args", []),
+                env=server_config.get("env"),
+                cwd=cwd,
+            )
+
+            # Create and enter context managers
+            stdio_ctx = stdio_client(server_params)
+            read, write = await stdio_ctx.__aenter__()
+
+            session_ctx = ClientSession(read, write)
+            session = await session_ctx.__aenter__()
+            await session.initialize()
+
+            # Store contexts for cleanup
+            self.mcp_connections.append(
+                {
+                    "stdio_ctx": stdio_ctx,
+                    "session_ctx": session_ctx,
+                }
+            )
+
+            # Get tools from this server
+            tools_list = await session.list_tools()
+
+            for tool in tools_list.tools:
+                self.mcp_tools.append(
+                    {
+                        "name": tool.name,
+                        "description": tool.description or f"MCP Tool: {tool.name}",
+                        "input_schema": tool.inputSchema,
+                        "mcp_session": session,
+                        "type": "mcp",
+                    }
+                )
+
+    async def cleanup(self):
+        """Properly cleanup all MCP connections"""
+        for conn in reversed(self.mcp_connections):
+            try:
+                await conn["session_ctx"].__aexit__(None, None, None)
+            except Exception as e:
+                print(f"Error closing session: {e}")
+
+            try:
+                await conn["stdio_ctx"].__aexit__(None, None, None)
+            except Exception as e:
+                print(f"Error closing stdio: {e}")
+
+    @property
+    def all_tools(self):
+        """Return all tools (local + MCP)"""
+        return self.local_tools + self.mcp_tools
 
     def schema(self):
         return [
             {
                 "name": t["name"],
                 "description": t["description"],
-                "input_schema": t["model"].model_json_schema(),
+                "input_schema": t.get("input_schema") or t["model"].model_json_schema(),
             }
-            for t in self.tools
+            for t in self.all_tools
         ]
 
     async def run(self, name, input):
-        tool = next(t for t in self.tools if t["name"] == name)
-        return await tool["model"](**input).run()
+        tool = next(t for t in self.all_tools if t["name"] == name)
+
+        if tool.get("type") == "mcp":
+            result = await tool["mcp_session"].call_tool(name, input)
+            return {
+                "success": not result.isError,
+                "output": "\n".join(
+                    c.text for c in result.content if hasattr(c, "text")
+                ),
+            }
+        else:
+            return await tool["model"](**input).run()
 
 
 @tool
@@ -174,24 +276,55 @@ async def loop(system_prompt, toolbox, messages, user_input):
 client = AsyncAnthropic()
 
 
-async def run_agent(tools=[]):
-    toolbox = Toolbox(tools)
-    messages = []
-    system_prompt = f"""Your name is HAL.
+def load_mcp_config(config_path="mcp.yaml"):
+    """Load MCP server configuration from YAML file"""
+    config_file = Path(config_path)
+
+    if not config_file.exists():
+        return []
+
+    try:
+        with open(config_file, "r") as f:
+            config = yaml.safe_load(f)
+            return config.get("servers", [])
+    except Exception as e:
+        print(f"⚠️  Error loading MCP config from {config_path}: {e}")
+        return []
+
+
+async def run_agent(tools=[], mcp_servers=[]):
+    """Run the agent with local tools and optional MCP servers"""
+    async with Toolbox(local_tools=tools, mcp_servers=mcp_servers) as toolbox:
+        messages = []
+        system_prompt = f"""Your name is HAL.
 You are an interactive CLI tool that helps with software engineering and production operations tasks.
 You are running on {str(os.uname())}, today is {datetime.now().strftime("%Y-%m-%d")}
 """
-    print("enter 'exit' to quit")
 
-    try:
-        while True:
-            user_input = input("> ")
-            if user_input.lower() == "exit":
-                print("👋 Goodbye!")
-                break
-            await loop(system_prompt, toolbox, messages, user_input)
-    except (KeyboardInterrupt, EOFError):
-        print("👋 Goodbye!")
+        if toolbox.mcp_tools:
+            print(
+                f"🔌 Connected to {len(mcp_servers)} MCP server(s) with {len(toolbox.mcp_tools)} tool(s)"
+            )
+
+        print("enter 'exit' to quit")
+
+        try:
+            while True:
+                user_input = input("> ")
+                if user_input.lower() == "exit":
+                    print("👋 Goodbye!")
+                    break
+                await loop(system_prompt, toolbox, messages, user_input)
+        except (KeyboardInterrupt, EOFError):
+            print("👋 Goodbye!")
 
 
-asyncio.run(run_agent(tools=[read_file, write_file, edit_file, shell]))
+if __name__ == "__main__":
+    # Load MCP servers from mcp.yaml if it exists, otherwise use default config
+    mcp_servers = load_mcp_config("mcp.yaml")
+
+    asyncio.run(
+        run_agent(
+            tools=[read_file, write_file, edit_file, shell], mcp_servers=mcp_servers
+        )
+    )

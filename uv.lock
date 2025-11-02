@@ -860,6 +860,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "jupyter" },
     { name = "pydantic" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -868,6 +869,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.72.0" },
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "pydantic", specifier = ">=2.12.3" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [[package]]
