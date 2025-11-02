@@ -61,13 +61,13 @@ uv run jupyter notebook
 
 ## Usage
 
-Start Jupyter Notebook:
+Open the main notebook:
 ```bash
-uv run jupyter notebook
+uv run jupyter notebook llm-agent-from-scratch.ipynb
 ```
 
 Or activate the virtual environment and run directly:
 ```bash
 source .venv/bin/activate
-jupyter notebook
+jupyter notebook llm-agent-from-scratch.ipynb
 ```
