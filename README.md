@@ -41,18 +41,6 @@ This will:
 - Install all project dependencies from `pyproject.toml`
 - Lock the dependencies in `uv.lock`
 
-### 4. Activate the Virtual Environment
-
-```bash
-source .venv/bin/activate
-```
-
-Alternatively, you can run commands directly with uv without activating:
-```bash
-uv run python script.py
-uv run jupyter notebook
-```
-
 ## Dependencies
 
 - **pydantic**: Data validation using Python type annotations
@@ -61,13 +49,14 @@ uv run jupyter notebook
 
 ## Usage
 
-Open the main notebook:
+To run the full example:
+```bash
+uv run main.py
+```
+
+To open the main notebook:
 ```bash
 uv run jupyter notebook llm-agent-from-scratch.ipynb
 ```
 
-Or activate the virtual environment and run directly:
-```bash
-source .venv/bin/activate
-jupyter notebook llm-agent-from-scratch.ipynb
-```
+**Note:** You can also manually activate the virtual environment with `source .venv/bin/activate` if preferred, but it's not required when using `uv run`.
