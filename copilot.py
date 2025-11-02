@@ -28,6 +28,7 @@ async def loop_responses(system_prompt, toolbox, messages, user_input, model="gp
             instructions=system_prompt,
             input=messages,
             tools=tools,
+            reasoning={"effort": "high", "summary": "auto"},
             tool_choice="auto" if tools else None,
         )
 
@@ -107,6 +108,7 @@ async def loop_completions(
             model=model,
             messages=[{"role": "system", "content": system_prompt}] + messages,
             tools=tools,
+            reasoning_effort="high",
             tool_choice="auto" if tools else None,
         )
 
