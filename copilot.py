@@ -5,19 +5,19 @@ from main import read_file, write_file, edit_file, shell, load_mcp_config
 
 
 async def loop(system_prompt, toolbox, messages, user_input, model="claude-sonnet-4.5"):
+    # Note: messages maintains the full conversation history as input items
+    # Add new user input to the conversation
     messages.append({"role": "user", "content": user_input})
 
     while True:
-        # Convert Anthropic tool schema to OpenAI function format
+        # Convert Anthropic tool schema to OpenAI Responses API format
         tools = (
             [
                 {
                     "type": "function",
-                    "function": {
-                        "name": t["name"],
-                        "description": t["description"],
-                        "parameters": t["input_schema"],
-                    },
+                    "name": t["name"],
+                    "description": t["description"],
+                    "parameters": t["input_schema"],
                 }
                 for t in toolbox.schema()
             ]
@@ -25,38 +25,65 @@ async def loop(system_prompt, toolbox, messages, user_input, model="claude-sonne
             else None
         )
 
-        completion = await client.chat.completions.create(
+        response = await client.responses.create(
             model=model,
-            messages=[{"role": "system", "content": system_prompt}] + messages,
+            instructions=system_prompt,
+            input=messages,
             tools=tools,
             tool_choice="auto" if tools else None,
         )
 
-        msg = completion.choices[0].message
-        messages.append(
-            {"role": "assistant", "content": msg.content, "tool_calls": msg.tool_calls}
-        )
+        # Add response output to conversation history
+        messages.extend(response.output)
 
-        if msg.content:
-            print(f"🤖 {msg.content}")
+        # Extract and display reasoning and text messages
+        for item in response.output:
+            if item.type == "reasoning":
+                # Display reasoning content if available, otherwise show summary
+                if item.content:
+                    reasoning_text = " ".join(
+                        c.text for c in item.content if c.type == "reasoning_text"
+                    )
+                    if reasoning_text:
+                        print(f"💭 {reasoning_text}")
+                elif item.summary:
+                    summary_text = " ".join(
+                        s.text for s in item.summary if s.type == "summary_text"
+                    )
+                    if summary_text:
+                        print(f"💭 {summary_text}")
+            elif item.type == "message" and item.role == "assistant":
+                for content in item.content:
+                    if content.type == "output_text":
+                        print(f"🤖 {content.text}")
 
-        if not msg.tool_calls:
+        # Extract function calls
+        function_calls = [
+            item for item in response.output if item.type == "function_call"
+        ]
+
+        if not function_calls:
             break
 
-        for tool_call in msg.tool_calls:
-            tool_name = tool_call.function.name
-            tool_args = json.loads(tool_call.function.arguments)
-            result = await toolbox.run(tool_name, tool_args)
+        # Execute all tools and collect results
+        results = await asyncio.gather(
+            *[
+                toolbox.run(item.name, json.loads(item.arguments))
+                for item in function_calls
+            ]
+        )
 
+        # Display results and add function outputs to conversation history
+        for item, result in zip(function_calls, results):
             status = "✅" if result.get("success") else "❌"
-            print(f"{status} {tool_name}:")
+            print(f"{status} {item.name}:")
             print(json.dumps(result, indent=2))
 
             messages.append(
                 {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps(result),
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps(result),
                 }
             )
 
@@ -68,7 +95,7 @@ client = create_openai_copilot_client()
 @click.option(
     "--model",
     type=click.Choice(
-        ["gpt-5", "gpt-4.1", "claude-sonnet-4.5", "gemini-2.5-pro"],
+        ["gpt-5", "gpt-5-codex", "gpt-4.1", "claude-sonnet-4.5", "gemini-2.5-pro"],
         case_sensitive=False,
     ),
     default="claude-sonnet-4.5",

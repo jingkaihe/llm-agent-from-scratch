@@ -292,6 +292,8 @@ def load_mcp_config(config_path="mcp.yaml"):
     try:
         with open(config_file, "r") as f:
             config = yaml.safe_load(f)
+            if config is None:
+                return {}
             return config.get("servers", {})
     except Exception as e:
         print(f"⚠️  Error loading MCP config from {config_path}: {e}")
