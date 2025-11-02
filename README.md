@@ -3,8 +3,6 @@
 A project for building LLM agents using Python, Pydantic, and Anthropic's API.
 
 ## Prerequisites
-
-- Python 3.8 or higher
 - `uv` package manager
 
 ## Setup Instructions
@@ -13,11 +11,9 @@ A project for building LLM agents using Python, Pydantic, and Anthropic's API.
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-```
 
-**Alternative (via pip):**
-```bash
-pip install uv
+# If you are on macOS
+brew install uv
 ```
 
 ### 2. Install Python (if needed)
@@ -69,42 +65,48 @@ uv run jupyter notebook llm-agent-from-scratch.ipynb
 
 The agent supports extending functionality through Model Context Protocol (MCP) servers. You can configure MCP servers using a `mcp.yaml` file in the project directory.
 
-#### Creating an MCP Configuration
+#### Configuration Format
 
-1. Copy the example configuration:
-   ```bash
-   cp mcp.yaml.example mcp.yaml
-   ```
+Create a `mcp.yaml` file in the project root with the following structure:
 
-2. Edit `mcp.yaml` to customize your MCP servers:
-   ```yaml
-   servers:
-     - command: npx
-       args:
-         - "-y"
-         - "@modelcontextprotocol/server-filesystem"
-         - "/path/to/directory"
-       cwd: "."  # Working directory (supports ~ and relative paths)
-       env: null  # Environment variables (optional)
-   ```
+```yaml
+servers:
+  server_name:
+    command: command_to_run
+    args:
+      - "arg1"
+      - "arg2"
+    env:
+      ENV_VAR: value
+```
+
+Each server is identified by a unique name (e.g., `github`, `filesystem`) and tools from that server will be prefixed with `mcp__server_name__`.
 
 #### Configuration Options
 
 Each MCP server can be configured with:
-- **command**: The executable to run (e.g., `npx`, `uvx`, `python`)
+- **command**: The executable to run (e.g., `npx`, `uvx`, `docker`)
 - **args**: List of arguments to pass to the command
-- **cwd**: Working directory for the server process (optional, supports `~` expansion)
 - **env**: Environment variables as key-value pairs (optional)
 
-#### Available MCP Servers
+#### Example Configurations
 
-- **@modelcontextprotocol/server-filesystem**: File system access tools
-- **mcp-server-git**: Git repository operations
-- **mcp-server-sqlite**: SQLite database access
-- **@modelcontextprotocol/server-github**: GitHub API integration
-
-See `mcp.yaml.example` for more examples.
+**GitHub Server (using Docker):**
+```yaml
+servers:
+  github:
+    command: docker
+    args:
+      - "run"
+      - "--rm"
+      - "-i"
+      - "-e"
+      - "GITHUB_PERSONAL_ACCESS_TOKEN"
+      - "ghcr.io/github/github-mcp-server"
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: null  # Set via environment variable, will be prompted if not set
+```
 
 #### Fallback Behavior
 
-If no `mcp.yaml` file is found, the agent will use a default configuration with a filesystem server pointing to `/tmp`.
+If no `mcp.yaml` file is found, the agent will start without MCP servers (local tools only).
