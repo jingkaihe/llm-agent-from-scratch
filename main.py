@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from getpass import getpass
 
 
 def tool(f):
@@ -78,7 +79,7 @@ class Toolbox:
                 if value is None:
                     value = os.environ.pop(env_var, None)
                 if value is None:
-                    value = input(f"Enter value for {env_var}: ")
+                    value = getpass(f"Enter value for {env_var}: ")
                     value = value.strip()
                 server_config["env"][env_var] = value
 
